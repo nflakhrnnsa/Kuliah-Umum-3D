@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>WebGIS 3D Full - Mapbox</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
+
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100vw; height: 100vh; }
+
+        .menu {
+            position: absolute;
+            background: white;
+            padding: 10px;
+            top: 10px;
+            left: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+<div id="map"></div>
+
+<!-- Layer Control -->
+<div class="menu">
+    <strong>Map Style</strong><br>
+    <input type="radio" name="style" value="mapbox://styles/mapbox/streets-v12" checked> Streets <br>
+    <input type="radio" name="style" value="mapbox://styles/mapbox/satellite-streets-v12"> Satellite <br>
+    <input type="radio" name="style" value="mapbox://styles/mapbox/dark-v11"> Dark <br><br>
+
+    <button id="rotate">Rotate 360°</button>
+</div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoibmZsYWtocm5uc2EiLCJhIjoiY21nOTV5cjRnMGR6eDJqcTB6Ym5rdXhvaSJ9.JE7QI26o4gt8OuPneijhiA';
+
+// === INITIAL MAP ===
+let map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/streets-v12',
+    center: [110.3695, -7.7956], // Yogyakarta
+    zoom: 15.5,
+    pitch: 60,
+    bearing: -20
+});
+
+
+map.on('load', () => {
+
+    // === DEM for 3D Terrain ===
+    map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url: 'mapbox://mapbox.terrain-rgb',
+        tileSize: 512,
+        maxzoom: 14
+    });
+
+    map.setTerrain({
+        source: 'mapbox-dem',
+        exaggeration: 1.4
+    });
+
+    // === Hillshade ===
+    map.addLayer({
+        id: 'hillshade',
+        type: 'hillshade',
+        source: 'mapbox-dem'
+    });
+
+    // === 3D Buildings ===
+    map.addLayer({
+        id: '3d-buildings',
+        source: 'composite',
+        'source-layer': 'building',
+        filter: ['==', ['get','extrude'], 'true'],
+        type: 'fill-extrusion',
+        minzoom: 14,
+        paint: {
+            'fill-extrusion-color': '#bbbbbb',
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': ['get', 'min_height'],
+            'fill-extrusion-opacity': 0.9
+        }
+    });
+
+    // === Popup on click ===
+    map.on('click', '3d-buildings', (e) => {
+        const props = e.features[0].properties;
+
+        new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(`
+                <strong>Building Info</strong><br>
+                Tinggi: ${props.height || '-'} m<br>
+                Min Height: ${props.min_height || '-'} m
+            `)
+            .addTo(map);
+    });
+
+});
+
+// === Style Switcher ===
+document.querySelectorAll('input[name="style"]').forEach(radio => {
+    radio.onclick = () => {
+        map.setStyle(radio.value);
+
+        map.once('styledata', () => {
+            // Re-add terrain & buildings when style changes
+            map.addSource('mapbox-dem', {
+                type: 'raster-dem',
+                url: 'mapbox://mapbox.terrain-rgb',
+                tileSize: 512,
+                maxzoom: 14
+            });
+
+            map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.4 });
+
+            map.addLayer({
+                id: '3d-buildings',
+                source: 'composite',
+                'source-layer': 'building',
+                filter: ['==', ['get','extrude'],'true'],
+                type: 'fill-extrusion',
+                minzoom: 14,
+                paint: {
+                    'fill-extrusion-color': '#bbbbbb',
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-base': ['get', 'min_height'],
+                    'fill-extrusion-opacity': 0.9
+                }
+            });
+        });
+    };
+});
+
+// === Rotate Button ===
+document.getElementById('rotate').onclick = () => {
+    map.rotateTo(map.getBearing() + 360, { duration: 6000 });
+};
+</script>
+
+</body>
+</html>
